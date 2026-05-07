@@ -1,7 +1,10 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import Base, engine
+
 from app.models import (
     User,
     PatientProfile,
@@ -14,8 +17,7 @@ from app.models import (
     ConsultationMessage,
     DoctorNote,
 )
-from app.models.medical_report import MedicalReport
-from app.models.report_analysis import ReportAnalysis
+
 from app.routes.auth import router as auth_router
 from app.routes.patients import router as patients_router
 from app.routes.doctors import router as doctors_router
@@ -34,20 +36,28 @@ from app.routes.audit_logs import router as audit_logs_router
 from app.routes.care_plans import router as care_plans_router
 from app.routes.feedback import router as feedback_router
 
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="MedInsight AI API")
 
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    FRONTEND_URL,
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=list(set(allowed_origins)),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(auth_router)
 app.include_router(patients_router)
