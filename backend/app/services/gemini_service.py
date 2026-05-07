@@ -1,7 +1,10 @@
-from google import genai
+import google.generativeai as genai
+
 from app.core.config import GEMINI_API_KEY
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+genai.configure(api_key=GEMINI_API_KEY)
+
 
 def analyze_medical_report_text(report_text: str):
     prompt = f"""
@@ -29,9 +32,25 @@ Medical Report Text:
 {report_text}
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
-    return response.text
+        response = model.generate_content(prompt)
+
+        return (response.text or "").strip()
+
+    except Exception as e:
+        print("Gemini analysis error:", str(e))
+        return """
+SUMMARY:
+Unable to generate AI summary at the moment.
+
+KEY_FINDINGS:
+- AI analysis service is currently unavailable.
+- Please try again later.
+
+DOCTOR_QUESTIONS:
+- Can you explain the main findings in this report?
+- Are any values outside the normal range?
+- Do I need any follow-up tests or consultation?
+"""

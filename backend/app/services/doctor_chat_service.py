@@ -1,7 +1,10 @@
-from google import genai
+import google.generativeai as genai
+
 from app.core.config import GEMINI_API_KEY
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+genai.configure(api_key=GEMINI_API_KEY)
+
 
 def generate_doctor_chat_answer(question: str, lab_history_text: str):
     prompt = f"""
@@ -23,9 +26,16 @@ Patient Question:
 {question}
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
-    return response.text
+        response = model.generate_content(prompt)
+
+        return (response.text or "").strip()
+
+    except Exception as e:
+        print("Doctor chat Gemini error:", str(e))
+        return (
+            "Sorry, I could not generate an AI response right now. "
+            "Please try again later or consult a qualified doctor for medical advice."
+        )

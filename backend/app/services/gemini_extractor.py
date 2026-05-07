@@ -1,8 +1,10 @@
 import os
-from google import genai
+import google.generativeai as genai
+
 from app.core.config import GEMINI_API_KEY
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 def extract_text_with_gemini(file_path: str) -> str:
@@ -23,9 +25,9 @@ def extract_text_with_gemini(file_path: str) -> str:
     uploaded_file = None
 
     try:
-        uploaded_file = client.files.upload(
-            file=file_path,
-            config={"mime_type": mime_type}
+        uploaded_file = genai.upload_file(
+            path=file_path,
+            mime_type=mime_type,
         )
 
         prompt = """
@@ -43,16 +45,21 @@ Rules:
 - If a table is present, convert it into readable plain text lines.
 """
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[uploaded_file, prompt]
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        response = model.generate_content(
+            [uploaded_file, prompt]
         )
 
         return (response.text or "").strip()
 
+    except Exception as e:
+        print("Gemini extraction error:", str(e))
+        return ""
+
     finally:
         if uploaded_file is not None:
             try:
-                client.files.delete(name=uploaded_file.name)
+                genai.delete_file(uploaded_file.name)
             except Exception:
                 pass
