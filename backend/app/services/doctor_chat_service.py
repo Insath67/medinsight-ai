@@ -34,8 +34,6 @@ Patient Question:
         return (response.text or "").strip()
 
     except Exception as e:
-        print("Doctor chat Gemini error:", str(e))
-        return (
-            "Sorry, I could not generate an AI response right now. "
-            "Please try again later or consult a qualified doctor for medical advice."
-        )
+        error_message = str(e)
+        print("Doctor chat Gemini error:", error_message)
+        return f"AI service error: {error_message}"
