@@ -1,11 +1,15 @@
-from fastapi import FastAPI
+from http.server import BaseHTTPRequestHandler
+import json
 
-app = FastAPI(title="MedInsight AI Backend")
 
-@app.get("/")
-def root():
-    return {"message": "Vercel backend is working"}
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+        response = {
+            "message": "Vercel Python backend is working"
+        }
+
+        self.wfile.write(json.dumps(response).encode("utf-8"))
