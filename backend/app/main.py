@@ -42,13 +42,19 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="MedInsight AI API")
 
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip()
 
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    FRONTEND_URL,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://medinsight-ai-zeta.vercel.app",
+    "https://medinsight-ai.vercel.app",
 ]
+
+if FRONTEND_URL:
+    allowed_origins.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,3 +87,8 @@ app.include_router(feedback_router)
 @app.get("/")
 def root():
     return {"message": "Welcome to MedInsight AI backend"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
