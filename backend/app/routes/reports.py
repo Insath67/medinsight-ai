@@ -25,7 +25,7 @@ from app.routes.auth import get_current_user
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-UPLOAD_DIR = "storage/reports"
+UPLOAD_DIR = "/tmp/reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
