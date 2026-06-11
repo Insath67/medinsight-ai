@@ -1,9 +1,10 @@
-import google.generativeai as genai
+import os
+from openai import OpenAI
 
-from app.core.config import GEMINI_API_KEY
 
-
-genai.configure(api_key=GEMINI_API_KEY)
+AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
+AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
+AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
 
 
 def analyze_medical_report_text(report_text: str):
@@ -33,14 +34,38 @@ Medical Report Text:
 """
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        if not AI_API_KEY:
+            raise ValueError("AI_API_KEY is missing in .env file")
 
-        response = model.generate_content(prompt)
+        client = OpenAI(
+            api_key=AI_API_KEY,
+            base_url=AI_BASE_URL,
+        )
 
-        return (response.text or "").strip()
+        response = client.chat.completions.create(
+            model=AI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are MedInsight AI, a safe medical report explanation assistant. "
+                        "You explain medical reports in simple patient-friendly language. "
+                        "You must not diagnose disease with certainty and must not prescribe medicine."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=0.2,
+            max_tokens=1200,
+        )
+
+        return (response.choices[0].message.content or "").strip()
 
     except Exception as e:
-        print("Gemini analysis error:", str(e))
+        print("Groq analysis error:", str(e))
         return """
 SUMMARY:
 Unable to generate AI summary at the moment.

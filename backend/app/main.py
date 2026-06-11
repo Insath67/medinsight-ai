@@ -42,13 +42,22 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="MedInsight AI API")
 
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip()
+# -----------------------------
+# CORS CONFIGURATION
+# -----------------------------
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
 
 allowed_origins = [
+    # Local Next.js frontend
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+
+    # Local Vite frontend, if used
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+
+    # Your Vercel frontend URLs
     "https://medinsight-ai-zeta.vercel.app",
     "https://medinsight-ai.vercel.app",
 ]
@@ -56,14 +65,22 @@ allowed_origins = [
 if FRONTEND_URL:
     allowed_origins.append(FRONTEND_URL)
 
+# Remove duplicates and empty values
+allowed_origins = list(dict.fromkeys([origin for origin in allowed_origins if origin]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(set(allowed_origins)),
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# -----------------------------
+# ROUTERS
+# -----------------------------
 
 app.include_router(auth_router)
 app.include_router(patients_router)
@@ -83,6 +100,10 @@ app.include_router(audit_logs_router)
 app.include_router(care_plans_router)
 app.include_router(feedback_router)
 
+
+# -----------------------------
+# HEALTH ROUTES
+# -----------------------------
 
 @app.get("/")
 def root():

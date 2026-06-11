@@ -1,118 +1,101 @@
+import os
 import json
 import re
-from typing import List, Optional
-
-import google.generativeai as genai
-from pydantic import BaseModel
-
-from app.core.config import GEMINI_API_KEY
+from openai import OpenAI
 
 
-genai.configure(api_key=GEMINI_API_KEY)
+AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
+AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
+AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
 
 
-class LabValueItem(BaseModel):
-    test: str
-    value: float
-    unit: Optional[str] = None
-    normal_range: Optional[str] = None
-    status: str
+def _clean_json_response(text: str) -> str:
+    text = text.strip()
 
+    if text.startswith("```"):
+        text = re.sub(r"^```json", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"^```", "", text).strip()
+        text = re.sub(r"```$", "", text).strip()
 
-class LabValueList(BaseModel):
-    detected_values: List[LabValueItem]
-
-
-def _extract_json_from_text(text: str) -> dict:
-    """
-    Gemini may sometimes return markdown JSON blocks.
-    This helper safely extracts the JSON object.
-    """
-    if not text:
-        return {"detected_values": []}
-
-    cleaned = text.strip()
-
-    cleaned = cleaned.replace("```json", "").replace("```", "").strip()
-
-    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    match = re.search(r"\[.*\]|\{.*\}", text, re.DOTALL)
     if match:
-        cleaned = match.group(0)
+        return match.group(0)
 
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        return {"detected_values": []}
+    return text
 
 
-def extract_lab_values_with_gemini(report_text: str) -> list:
+def extract_lab_results_with_gemini(report_text: str):
+    """
+    Old function name kept so existing imports will not break.
+    Now this uses Groq instead of Gemini.
+    """
+
     prompt = f"""
-You are a medical lab value extraction assistant.
+Extract lab test results from the following medical report text.
 
-Extract lab test values from the following medical report text.
+Return ONLY valid JSON array.
 
-Return ONLY valid JSON in this exact structure:
-
-{{
-  "detected_values": [
-    {{
-      "test": "Hemoglobin",
-      "value": 13.5,
-      "unit": "g/dL",
-      "normal_range": "13.0 - 17.0",
-      "status": "NORMAL"
-    }}
-  ]
-}}
+Each item must use this structure:
+[
+  {{
+    "test": "test name",
+    "value": "value",
+    "unit": "unit if available",
+    "normal_range": "normal/reference range if available",
+    "status": "NORMAL | HIGH | LOW | ABNORMAL | UNKNOWN"
+  }}
+]
 
 Rules:
-- Return only actual lab test values found in the report.
-- Ignore general narrative text, diagnosis notes, prescriptions, employment letters, and administrative text.
-- Do not include explanations.
-- Do not include markdown.
-- Do not wrap the JSON inside ```json.
-- For each detected lab result, extract:
-  - test
-  - value
-  - unit
-  - normal_range
-  - status
-
-Status rules:
-- Use HIGH if the value is above the visible reference range.
-- Use LOW if the value is below the visible reference range.
-- Use NORMAL if the value is within the visible reference range.
-- If no range is visible but the report explicitly marks it high/low/normal, use that.
-- If status cannot be confidently determined, do not include that item.
+- If the value is above the reference range, status must be HIGH.
+- If the value is below the reference range, status must be LOW.
+- If the value is inside the reference range, status must be NORMAL.
+- If you cannot decide, use UNKNOWN.
+- Do not add markdown.
+- Do not add explanation outside JSON.
 
 Medical Report Text:
 {report_text}
 """
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        if not AI_API_KEY:
+            raise ValueError("AI_API_KEY is missing in .env file")
 
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "response_mime_type": "application/json"
-            },
+        client = OpenAI(
+            api_key=AI_API_KEY,
+            base_url=AI_BASE_URL,
         )
 
-        data = _extract_json_from_text(response.text or "")
-        parsed = LabValueList(**data)
+        response = client.chat.completions.create(
+            model=AI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a medical lab result extraction assistant. Return only valid JSON.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=0,
+            max_tokens=2000,
+        )
 
-        return [
-            {
-                "test": item.test,
-                "value": item.value,
-                "unit": item.unit,
-                "normal_range": item.normal_range,
-                "status": item.status,
-            }
-            for item in parsed.detected_values
-        ]
+        text = response.choices[0].message.content or "[]"
+        cleaned = _clean_json_response(text)
+
+        return json.loads(cleaned)
 
     except Exception as e:
-        print("Gemini lab extraction error:", str(e))
+        print("Groq lab extraction error:", str(e))
         return []
+
+
+# Aliases to avoid route import errors
+extract_lab_results = extract_lab_results_with_gemini
+extract_labs_with_gemini = extract_lab_results_with_gemini
+extract_labs_with_ai = extract_lab_results_with_gemini
+extract_lab_values = extract_lab_results_with_gemini
+extract_lab_values_with_gemini = extract_lab_results_with_gemini

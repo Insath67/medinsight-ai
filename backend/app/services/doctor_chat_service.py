@@ -1,39 +1,77 @@
-import google.generativeai as genai
-
-from app.core.config import GEMINI_API_KEY
-
-
-genai.configure(api_key=GEMINI_API_KEY)
+import os
+from openai import OpenAI
 
 
-def generate_doctor_chat_answer(question: str, lab_history_text: str):
+AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
+AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
+AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
+
+
+def doctor_chat_response(question: str, patient_context: str = "") -> str:
     prompt = f"""
-You are a patient-friendly AI medical assistant.
+You are MedInsight AI assistant for doctors.
 
-Use the patient's saved lab history below to answer the question.
+Help the doctor understand patient reports and lab history.
 
-Rules:
-- Do NOT diagnose with certainty.
-- Do NOT prescribe medicine.
-- Explain in simple language.
-- If something seems serious, advise the patient to consult a doctor.
-- Be concise but helpful.
+Important rules:
+- Do not replace a qualified doctor's clinical judgment.
+- Do not give unsafe or overconfident conclusions.
+- Do not prescribe medicine.
+- Summarize clearly.
+- Mention possible points to review, not final diagnosis.
+- Keep the answer professional and concise.
 
-Patient Lab History:
-{lab_history_text}
+Patient Context:
+{patient_context}
 
-Patient Question:
+Doctor Question:
 {question}
 """
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        if not AI_API_KEY:
+            raise ValueError("AI_API_KEY is missing in .env file")
 
-        response = model.generate_content(prompt)
+        client = OpenAI(
+            api_key=AI_API_KEY,
+            base_url=AI_BASE_URL,
+        )
 
-        return (response.text or "").strip()
+        response = client.chat.completions.create(
+            model=AI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are MedInsight AI, a safe clinical information assistant "
+                        "for doctors. Provide educational and clinical-support information only. "
+                        "Do not replace professional medical judgment."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=0.2,
+            max_tokens=1200,
+        )
+
+        return (response.choices[0].message.content or "").strip()
 
     except Exception as e:
-        error_message = str(e)
-        print("Doctor chat Gemini error:", error_message)
-        return f"AI service error: {error_message}"
+        print("Groq doctor chat error:", str(e))
+        return (
+            "AI doctor chat service is currently unavailable. "
+            "Please try again later."
+        )
+
+
+# Aliases to avoid route import errors
+ask_doctor_ai = doctor_chat_response
+ask_doctor_chat = doctor_chat_response
+generate_doctor_chat_response = doctor_chat_response
+generate_doctor_response = doctor_chat_response
+get_doctor_ai_response = doctor_chat_response
+ask_doctor = doctor_chat_response
+generate_doctor_chat_answer = doctor_chat_response
