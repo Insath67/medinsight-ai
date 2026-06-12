@@ -239,88 +239,151 @@ def detect_report_values(
     current_user: User = Depends(require_patient),
     db: Session = Depends(get_db)
 ):
-    report = db.query(MedicalReport).filter(
-        MedicalReport.id == report_id,
-        MedicalReport.patient_id == current_user.id
-    ).first()
-
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    extracted_text = extract_text_from_report(report.file_path)
-
-    if not extracted_text:
-        raise HTTPException(status_code=400, detail="No text detected")
-
-    detected_values = extract_lab_values_with_gemini(extracted_text)
-
-    existing_results = db.query(LabTestResult).filter(
-        LabTestResult.report_id == report.id
-    ).all()
-
-    if existing_results:
-        return {
-            "message": "Lab values already stored for this report",
-            "report_id": report_id,
-            "detected_values": [
-                {
-                    "test": item.test_name,
-                    "value": item.test_value,
-                    "normal_range": item.normal_range,
-                    "status": item.status
-                }
-                for item in existing_results
-            ]
-        }
-
-    for item in detected_values:
-        new_result = LabTestResult(
-            report_id=report.id,
-            patient_id=current_user.id,
-            test_name=item["test"],
-            test_value=item["value"],
-            normal_range=item.get("normal_range"),
-            status=item["status"]
-        )
-        db.add(new_result)
-
-    db.commit()
-
-    abnormal_values = [
-        item for item in detected_values
-        if item.get("status") and item.get("status").lower() != "normal"
-    ]
-
-    if abnormal_values:
-        create_notification(
-            db=db,
-            user_id=report.patient_id,
-            title="Abnormal Values Detected",
-            message="Some abnormal lab values were detected in your uploaded report.",
-            type="abnormal_values_detected"
-        )
-
-        existing_reminder = db.query(Reminder).filter(
-            Reminder.user_id == report.patient_id,
-            Reminder.reminder_type == "repeat_test",
-            Reminder.title == f"Repeat Test Reminder - Report {report.id}",
-            Reminder.is_completed == False
+    try:
+        report = db.query(MedicalReport).filter(
+            MedicalReport.id == report_id,
+            MedicalReport.patient_id == current_user.id
         ).first()
 
-        if not existing_reminder:
-            create_reminder(
-                db=db,
-                user_id=report.patient_id,
-                title=f"Repeat Test Reminder - Report {report.id}",
-                message="Some abnormal lab values were found. Please repeat your test or consult your doctor.",
-                reminder_type="repeat_test",
-                due_at=datetime.utcnow() + timedelta(days=7)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        existing_results = db.query(LabTestResult).filter(
+            LabTestResult.report_id == report.id
+        ).all()
+
+        if existing_results:
+            return {
+                "message": "Lab values already stored for this report",
+                "report_id": report_id,
+                "detected_values": [
+                    {
+                        "test": item.test_name,
+                        "value": item.test_value,
+                        "normal_range": item.normal_range,
+                        "status": item.status
+                    }
+                    for item in existing_results
+                ]
+            }
+
+        extracted_text = extract_text_from_report(report.file_path)
+
+        if not extracted_text:
+            raise HTTPException(status_code=400, detail="No text detected from report")
+
+        detected_values = extract_lab_values_with_gemini(extracted_text)
+
+        if not isinstance(detected_values, list):
+            detected_values = []
+
+        saved_values = []
+
+        for item in detected_values:
+            if not isinstance(item, dict):
+                continue
+
+            test_name = str(
+                item.get("test")
+                or item.get("test_name")
+                or item.get("name")
+                or item.get("parameter")
+                or ""
+            ).strip()
+
+            test_value = str(
+                item.get("value")
+                or item.get("test_value")
+                or item.get("result")
+                or item.get("finding")
+                or ""
+            ).strip()
+
+            normal_range = str(
+                item.get("normal_range")
+                or item.get("reference_range")
+                or item.get("range")
+                or ""
+            ).strip()
+
+            status = str(item.get("status") or "UNKNOWN").upper().strip()
+
+            if status not in ["NORMAL", "HIGH", "LOW", "ABNORMAL", "UNKNOWN"]:
+                status = "UNKNOWN"
+
+            if not test_name or not test_value:
+                continue
+
+            new_result = LabTestResult(
+                report_id=report.id,
+                patient_id=current_user.id,
+                test_name=test_name,
+                test_value=test_value,
+                normal_range=normal_range,
+                status=status
             )
 
-    return {
-        "report_id": report_id,
-        "detected_values": detected_values
-    }
+            db.add(new_result)
+
+            saved_values.append({
+                "test": test_name,
+                "value": test_value,
+                "normal_range": normal_range,
+                "status": status
+            })
+
+        db.commit()
+
+        abnormal_values = [
+            item for item in saved_values
+            if str(item.get("status", "")).upper() != "NORMAL"
+        ]
+
+        if abnormal_values:
+            try:
+                create_notification(
+                    db=db,
+                    user_id=report.patient_id,
+                    title="Abnormal Values Detected",
+                    message="Some abnormal lab values were detected in your uploaded report.",
+                    type="abnormal_values_detected"
+                )
+
+                existing_reminder = db.query(Reminder).filter(
+                    Reminder.user_id == report.patient_id,
+                    Reminder.reminder_type == "repeat_test",
+                    Reminder.title == f"Repeat Test Reminder - Report {report.id}",
+                    Reminder.is_completed == False
+                ).first()
+
+                if not existing_reminder:
+                    create_reminder(
+                        db=db,
+                        user_id=report.patient_id,
+                        title=f"Repeat Test Reminder - Report {report.id}",
+                        message="Some abnormal lab values were found. Please repeat your test or consult your doctor.",
+                        reminder_type="repeat_test",
+                        due_at=datetime.utcnow() + timedelta(days=7)
+                    )
+            except Exception as notify_error:
+                print("Notification/reminder creation skipped:", str(notify_error))
+
+        return {
+            "message": "Lab values detected and saved successfully",
+            "report_id": report_id,
+            "detected_values": saved_values
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        db.rollback()
+        print("Detect values endpoint error:", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Detect values failed: {str(e)}"
+        )
 
 
 @router.post("/explain-values/{report_id}")
