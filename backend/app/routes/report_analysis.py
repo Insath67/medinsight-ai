@@ -267,10 +267,22 @@ def detect_report_values(
                 ]
             }
 
-        extracted_text = extract_text_from_report(report.file_path)
+        existing_analysis = db.query(ReportAnalysis).filter(
+            ReportAnalysis.report_id == report.id
+        ).first()
+
+        extracted_text = ""
+
+        if existing_analysis and existing_analysis.extracted_text:
+            extracted_text = existing_analysis.extracted_text
+        else:
+            extracted_text = extract_text_from_report(report.file_path)
 
         if not extracted_text:
-            raise HTTPException(status_code=400, detail="No text detected from report")
+            raise HTTPException(
+                status_code=400,
+                detail="No extracted text found. Please regenerate AI analysis first."
+            )
 
         detected_values = extract_lab_values_with_gemini(extracted_text)
 
