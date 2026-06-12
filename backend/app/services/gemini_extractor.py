@@ -1,15 +1,7 @@
-import os
 import base64
 import mimetypes
-from openai import OpenAI
 
-
-AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
-AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
-AI_VISION_MODEL = os.getenv(
-    "AI_VISION_MODEL",
-    "meta-llama/llama-4-scout-17b-16e-instruct"
-)
+from app.services.groq_client import groq_chat, AI_VISION_MODEL
 
 
 def _encode_image_to_data_url(file_path: str) -> str:
@@ -26,7 +18,10 @@ def _encode_image_to_data_url(file_path: str) -> str:
 
 def _extract_pdf_text(file_path: str) -> str:
     try:
-        from pypdf import PdfReader
+        try:
+            from pypdf import PdfReader
+        except Exception:
+            from PyPDF2 import PdfReader
 
         reader = PdfReader(file_path)
         text = ""
@@ -44,8 +39,8 @@ def _extract_pdf_text(file_path: str) -> str:
 
 def extract_text_with_gemini(file_path: str) -> str:
     """
-    Old function name kept to avoid breaking existing imports.
-    Now it uses Groq instead of Gemini.
+    Old function name kept so existing routes will not break.
+    Now this uses Groq instead of Gemini.
     """
 
     try:
@@ -54,28 +49,17 @@ def extract_text_with_gemini(file_path: str) -> str:
 
         lower_path = file_path.lower()
 
-        # For normal text-based PDFs
         if lower_path.endswith(".pdf"):
             pdf_text = _extract_pdf_text(file_path)
 
             if pdf_text:
                 return pdf_text
 
-            print("PDF has no readable text. It may be a scanned PDF/image PDF.")
             return ""
-
-        # For image reports: jpg, jpeg, png, webp
-        if not AI_API_KEY:
-            raise ValueError("AI_API_KEY is missing in .env file")
 
         data_url = _encode_image_to_data_url(file_path)
 
-        client = OpenAI(
-            api_key=AI_API_KEY,
-            base_url=AI_BASE_URL,
-        )
-
-        response = client.chat.completions.create(
+        return groq_chat(
             model=AI_VISION_MODEL,
             messages=[
                 {
@@ -99,9 +83,7 @@ def extract_text_with_gemini(file_path: str) -> str:
             ],
             temperature=0,
             max_tokens=2000,
-        )
-
-        return (response.choices[0].message.content or "").strip()
+        ).strip()
 
     except Exception as e:
         print("Groq extractor error:", str(e))

@@ -1,10 +1,4 @@
-import os
-from openai import OpenAI
-
-
-AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
-AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
-AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
+from app.services.groq_client import groq_chat
 
 
 def analyze_medical_report_text(report_text: str):
@@ -34,16 +28,7 @@ Medical Report Text:
 """
 
     try:
-        if not AI_API_KEY:
-            raise ValueError("AI_API_KEY is missing in .env file")
-
-        client = OpenAI(
-            api_key=AI_API_KEY,
-            base_url=AI_BASE_URL,
-        )
-
-        response = client.chat.completions.create(
-            model=AI_MODEL,
+        return groq_chat(
             messages=[
                 {
                     "role": "system",
@@ -60,9 +45,7 @@ Medical Report Text:
             ],
             temperature=0.2,
             max_tokens=1200,
-        )
-
-        return (response.choices[0].message.content or "").strip()
+        ).strip()
 
     except Exception as e:
         print("Groq analysis error:", str(e))

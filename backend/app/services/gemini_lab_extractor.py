@@ -1,12 +1,7 @@
-import os
 import json
 import re
-from openai import OpenAI
 
-
-AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
-AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1")
-AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
+from app.services.groq_client import groq_chat
 
 
 def _clean_json_response(text: str) -> str:
@@ -25,11 +20,6 @@ def _clean_json_response(text: str) -> str:
 
 
 def extract_lab_results_with_gemini(report_text: str):
-    """
-    Old function name kept so existing imports will not break.
-    Now this uses Groq instead of Gemini.
-    """
-
     prompt = f"""
 Extract lab test results from the following medical report text.
 
@@ -59,16 +49,7 @@ Medical Report Text:
 """
 
     try:
-        if not AI_API_KEY:
-            raise ValueError("AI_API_KEY is missing in .env file")
-
-        client = OpenAI(
-            api_key=AI_API_KEY,
-            base_url=AI_BASE_URL,
-        )
-
-        response = client.chat.completions.create(
-            model=AI_MODEL,
+        text = groq_chat(
             messages=[
                 {
                     "role": "system",
@@ -83,9 +64,7 @@ Medical Report Text:
             max_tokens=2000,
         )
 
-        text = response.choices[0].message.content or "[]"
-        cleaned = _clean_json_response(text)
-
+        cleaned = _clean_json_response(text or "[]")
         return json.loads(cleaned)
 
     except Exception as e:
@@ -93,7 +72,6 @@ Medical Report Text:
         return []
 
 
-# Aliases to avoid route import errors
 extract_lab_results = extract_lab_results_with_gemini
 extract_labs_with_gemini = extract_lab_results_with_gemini
 extract_labs_with_ai = extract_lab_results_with_gemini
