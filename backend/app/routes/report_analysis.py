@@ -130,6 +130,78 @@ def analyze_report(
     }
 
 
+@router.post("/regenerate-analysis/{report_id}")
+def regenerate_report_analysis(
+    report_id: str,
+    current_user: User = Depends(require_patient),
+    db: Session = Depends(get_db)
+):
+    report = db.query(MedicalReport).filter(
+        MedicalReport.id == report_id,
+        MedicalReport.patient_id == current_user.id
+    ).first()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    extracted_text = extract_text_from_report(report.file_path)
+
+    if not extracted_text:
+        raise HTTPException(status_code=400, detail="Could not extract text from report")
+
+    existing_analysis = db.query(ReportAnalysis).filter(
+        ReportAnalysis.report_id == report.id
+    ).first()
+
+    if existing_analysis:
+        db.delete(existing_analysis)
+        db.commit()
+
+    ai_result = analyze_medical_report_text(extracted_text)
+    summary, key_findings, doctor_questions = parse_ai_response(ai_result)
+
+    new_analysis = ReportAnalysis(
+        report_id=report.id,
+        extracted_text=extracted_text,
+        summary=summary,
+        key_findings=key_findings,
+        doctor_questions=doctor_questions
+    )
+
+    db.add(new_analysis)
+    db.commit()
+    db.refresh(new_analysis)
+
+    create_notification(
+        db=db,
+        user_id=report.patient_id,
+        title="AI Analysis Regenerated",
+        message="Your report analysis has been regenerated successfully.",
+        type="ai_analysis_completed"
+    )
+
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="REPORT_ANALYSIS_REGENERATED",
+        target_type="ReportAnalysis",
+        target_id=str(new_analysis.id),
+        description=f"AI analysis regenerated for report {report.id}"
+    )
+
+    return {
+        "message": "Report analysis regenerated successfully",
+        "analysis": {
+            "id": str(new_analysis.id),
+            "report_id": str(new_analysis.report_id),
+            "extracted_text": new_analysis.extracted_text,
+            "summary": new_analysis.summary,
+            "key_findings": new_analysis.key_findings,
+            "doctor_questions": new_analysis.doctor_questions
+        }
+    }
+
+
 @router.get("/analysis/{report_id}")
 def get_report_analysis(
     report_id: str,
