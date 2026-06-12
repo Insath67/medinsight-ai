@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 AI_API_KEY = os.getenv("AI_API_KEY") or os.getenv("GROQ_API_KEY")
 AI_BASE_URL = os.getenv("AI_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
-AI_MODEL = os.getenv("AI_MODEL", "llama-3.3-70b-versatile")
+AI_MODEL = os.getenv("AI_MODEL", "llama-3.1-8b-instant")
 AI_VISION_MODEL = os.getenv(
     "AI_VISION_MODEL",
     "meta-llama/llama-4-scout-17b-16e-instruct",
@@ -36,6 +36,12 @@ def groq_chat(
         headers={
             "Authorization": f"Bearer {AI_API_KEY}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
         },
         method="POST",
     )
