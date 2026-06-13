@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import AppNavbar from "@/components/layout/AppNavbar";
 import { API_BASE_URL } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import {
@@ -47,12 +48,12 @@ type AnalysisResponse = {
 type LabResultItem = {
   id?: string;
   test_name?: string;
-  test_value?: number;
+  test_value?: string | number;
   normal_range?: string;
   status?: string;
   clinical_interpretation?: {
     test_name?: string;
-    value?: number;
+    value?: string | number;
     normal_range?: string;
     status?: string;
     severity?: string;
@@ -801,7 +802,10 @@ function ReportDetailsContent() {
 export default function ReportDetailsPage() {
   return (
     <ProtectedRoute allowedRoles={["patient", "Patient"]}>
-      <ReportDetailsContent />
+      <>
+        <AppNavbar />
+        <ReportDetailsContent />
+      </>
     </ProtectedRoute>
   );
 }
